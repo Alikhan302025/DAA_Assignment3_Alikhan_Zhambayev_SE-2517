@@ -1,4 +1,5 @@
 package metrics;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -7,23 +8,26 @@ public class CsvWriter {
 
     public static void writeHeader(String filename) {
         try (PrintWriter out = new PrintWriter(new FileWriter(filename, false))) {
-            out.println("Algorithm,Vertices,Edges,DsuOps,EdgeScans,Comparisons,MaxDepth,TimeNs");
+            out.println("algorithm,graph,n,m,time_ms,dsu_ops,edge_scans,comparisons,max_depth,result");
         } catch (IOException e) {
             System.err.println("Ошибка при записи заголовков CSV: " + e.getMessage());
         }
     }
 
-    public static void writeRecord(String filename, String algoName, int vertices, int edges, Metrics metrics, long timeNs) {
+    public static void writeRecord(String filename, String algoName, String graphType, int n, int m, Metrics metrics, long timeNs, long resultValue) {
+        long timeMs = timeNs / 1_000_000;
         try (PrintWriter out = new PrintWriter(new FileWriter(filename, true))) {
-            out.printf("%s,%d,%d,%d,%d,%d,%d,%d\n",
+            out.printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
                     algoName,
-                    vertices,
-                    edges,
+                    graphType,
+                    n,
+                    m,
+                    timeMs,
                     metrics.getDsuOps(),
                     metrics.getEdgeScans(),
                     metrics.getComparisons(),
                     metrics.getMaxDepth(),
-                    timeNs);
+                    resultValue);
         } catch (IOException e) {
             System.err.println("Ошибка при записи строки CSV: " + e.getMessage());
         }

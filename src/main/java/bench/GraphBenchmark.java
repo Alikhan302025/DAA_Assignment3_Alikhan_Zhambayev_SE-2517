@@ -14,73 +14,91 @@ import java.util.Random;
 
 public class GraphBenchmark {
     private static final String CSV_FILE = "results.csv";
-    private static final Random random = new Random(42);
+
+    // Единый Random(42) для воспроизводимости, как сказано в задании
+    private static Random random;
 
     public static void runAll() {
         CsvWriter.writeHeader(CSV_FILE);
 
-        int[] vertexCounts = {10, 100, 500, 1000, 3000};
+        int[] vertexCounts = {1000, 3162, 10000, 31623, 100000};
 
-        for (int v : vertexCounts) {
-            int sparseE = v * 2;
-            int denseE = Math.min(v * (v - 1) / 2, v * 15);
+        for (int n : vertexCounts) {
+            int mSparse = 4 * n;
+            int mDense = 20 * n;
 
-            runMstBenchmarks(v, sparseE);
-            runMstBenchmarks(v, denseE);
-
-            runSccBenchmarks(v, sparseE);
-            runSccBenchmarks(v, denseE);
-
-            runDagBenchmarks(v, sparseE);
-            runDagBenchmarks(v, denseE);
+            runBenchmarksForSize(n, mSparse);
+            runBenchmarksForSize(n, mDense);
         }
     }
 
-    private static void runMstBenchmarks(int v, int e) {
-        Graph graph = generateRandomUndirectedGraph(v, e);
+    private static void runBenchmarksForSize(int n, int m) {
+        // 1. Undirected graph for MST
+        random = new Random(42);
+        Graph undirectedGraph = generateRandomUndirectedGraph(n, m);
 
-        long startTime = System.nanoTime();
-        Result<List<Edge>> kruskalResult = MSTAlgorithms.kruskal(graph);
-        long timeKruskal = System.nanoTime() - startTime;
-        CsvWriter.writeRecord(CSV_FILE, "Kruskal", v, e, kruskalResult.getMetrics(), timeKruskal);
+        long[] times = runMultiple(5, () -> MSTAlgorithms.kruskal(undirectedGraph));
+        Result<List<Edge>> kruskalResult = MSTAlgorithms.kruskal(undirectedGraph);
+        long kruskalWeight = kruskalResult.getValue().stream().mapToLong(Edge::getWeight).sum();
+        CsvWriter.writeRecord(CSV_FILE, "Kruskal", "undirected", n, m, kruskalResult.getMetrics(), getMedian(times), kruskalWeight);
 
-        startTime = System.nanoTime();
-        Result<List<Edge>> primResult = MSTAlgorithms.prim(graph);
-        long timePrim = System.nanoTime() - startTime;
-        CsvWriter.writeRecord(CSV_FILE, "Prim", v, e, primResult.getMetrics(), timePrim);
-    }
+        times = runMultiple(5, () -> MSTAlgorithms.prim(undirectedGraph));
+        Result<List<Edge>> primResult = MSTAlgorithms.prim(undirectedGraph);
+        long primWeight = primResult.getValue().stream().mapToLong(Edge::getWeight).sum();
+        CsvWriter.writeRecord(CSV_FILE, "Prim", "undirected", n, m, primResult.getMetrics(), getMedian(times), primWeight);
 
-    private static void runSccBenchmarks(int v, int e) {
-        Graph graph = generateRandomDirectedGraph(v, e);
+        // 2. Directed graph for SCC (Kosaraju)
+        random = new Random(42);
+        Graph directedGraph = generateRandomDirectedGraph(n, m);
 
-        long startTime = System.nanoTime();
-        Result<List<List<Integer>>> kosarajuResult = SCCAlgorithms.kosaraju(graph);
-        long timeKosaraju = System.nanoTime() - startTime;
-        CsvWriter.writeRecord(CSV_FILE, "Kosaraju", v, e, kosarajuResult.getMetrics(), timeKosaraju);
+        times = runMultiple(5, () -> SCCAlgorithms.kosaraju(directedGraph));
+        Result<List<List<Integer>>> kosarajuResult = SCCAlgorithms.kosaraju(directedGraph);
+        CsvWriter.writeRecord(CSV_FILE, "Kosaraju", "directed", n, m, kosarajuResult.getMetrics(), getMedian(times), kosarajuResult.getValue().size());
 
-        startTime = System.nanoTime();
-        Result<List<Integer>> kahnResult = SCCAlgorithms.kahn(graph);
-        long timeKahn = System.nanoTime() - startTime;
-        CsvWriter.writeRecord(CSV_FILE, "Kahn", v, e, kahnResult.getMetrics(), timeKahn);
-    }
+        // 3. DAG for Kahn and Shortest Paths
+        random = new Random(42);
+        Graph dag = generateRandomDAG(n, m);
 
-    private static void runDagBenchmarks(int v, int e) {
-        Graph dag = generateRandomDAG(v, e);
+        times = runMultiple(5, () -> SCCAlgorithms.kahn(dag));
+        Result<List<Integer>> kahnResult = SCCAlgorithms.kahn(dag);
+        CsvWriter.writeRecord(CSV_FILE, "Kahn", "DAG", n, m, kahnResult.getMetrics(), getMedian(times), kahnResult.getValue().size());
 
-        long startTime = System.nanoTime();
+        times = runMultiple(5, () -> DAGShortestPath.findShortestPath(dag, 0));
         Result<int[]> dagResult = DAGShortestPath.findShortestPath(dag, 0);
-        long timeDag = System.nanoTime() - startTime;
-        CsvWriter.writeRecord(CSV_FILE, "DAG_ShortestPath", v, e, dagResult.getMetrics(), timeDag);
+        long distSum = 0;
+        for (int d : dagResult.getValue()) {
+            if (d != Integer.MAX_VALUE) {
+                distSum += d;
+            }
+        }
+        CsvWriter.writeRecord(CSV_FILE, "DagShortestPath", "DAG", n, m, dagResult.getMetrics(), getMedian(times), distSum);
     }
 
-    public static Graph generateRandomUndirectedGraph(int vertices, int edges) {
-        Graph graph = new AdjacencyListGraph(vertices, false);
-        int added = 0;
-        while (added < edges) {
-            int u = random.nextInt(vertices);
-            int v = random.nextInt(vertices);
+    private static Graph generateRandomUndirectedGraph(int n, int m) {
+        Graph graph = new AdjacencyListGraph(n, false);
+        int[] perm = new int[n];
+        for (int i = 0; i < n; i++) perm[i] = i;
+
+        for (int i = n - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = perm[i];
+            perm[i] = perm[j];
+            perm[j] = temp;
+        }
+
+        for (int i = 1; i < n; i++) {
+            int u = perm[random.nextInt(i)];
+            int v = perm[i];
+            int weight = 1 + random.nextInt(1000);
+            graph.addEdge(u, v, weight);
+        }
+
+        int added = n - 1;
+        while (added < m) {
+            int u = random.nextInt(n);
+            int v = random.nextInt(n);
             if (u != v) {
-                int weight = random.nextInt(100) + 1;
+                int weight = 1 + random.nextInt(1000);
                 graph.addEdge(u, v, weight);
                 added++;
             }
@@ -88,14 +106,14 @@ public class GraphBenchmark {
         return graph;
     }
 
-    public static Graph generateRandomDirectedGraph(int vertices, int edges) {
-        Graph graph = new AdjacencyListGraph(vertices, true);
+    private static Graph generateRandomDirectedGraph(int n, int m) {
+        Graph graph = new AdjacencyListGraph(n, true);
         int added = 0;
-        while (added < edges) {
-            int u = random.nextInt(vertices);
-            int v = random.nextInt(vertices);
+        while (added < m) {
+            int u = random.nextInt(n);
+            int v = random.nextInt(n);
             if (u != v) {
-                int weight = random.nextInt(100) + 1;
+                int weight = 1 + random.nextInt(1000);
                 graph.addEdge(u, v, weight);
                 added++;
             }
@@ -103,18 +121,48 @@ public class GraphBenchmark {
         return graph;
     }
 
-    public static Graph generateRandomDAG(int vertices, int edges) {
-        Graph graph = new AdjacencyListGraph(vertices, true);
+    private static Graph generateRandomDAG(int n, int m) {
+        Graph graph = new AdjacencyListGraph(n, true);
+        int[] rank = new int[n];
+        for (int i = 0; i < n; i++) rank[i] = i;
+
+        for (int i = n - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = rank[i];
+            rank[i] = rank[j];
+            rank[j] = temp;
+        }
+
         int added = 0;
-        while (added < edges) {
-            int u = random.nextInt(vertices);
-            int v = random.nextInt(vertices);
-            if (u < v) {
-                int weight = random.nextInt(100) + 1;
+        while (added < m) {
+            int u = random.nextInt(n);
+            int v = random.nextInt(n);
+            if (u != v) {
+                if (rank[u] > rank[v]) {
+                    int temp = u;
+                    u = v;
+                    v = temp;
+                }
+                int weight = 1 + random.nextInt(1000);
                 graph.addEdge(u, v, weight);
                 added++;
             }
         }
         return graph;
+    }
+
+    private static long[] runMultiple(int times, Runnable task) {
+        long[] results = new long[times];
+        for (int i = 0; i < times; i++) {
+            long start = System.nanoTime();
+            task.run();
+            results[i] = System.nanoTime() - start;
+        }
+        return results;
+    }
+
+    private static long getMedian(long[] times) {
+        java.util.Arrays.sort(times);
+        return times[times.length / 2];
     }
 }
