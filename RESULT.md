@@ -44,3 +44,7 @@ In a Directed Acyclic Graph, a topological sort guarantees that for every direct
 
 **Why Wall-Clock Time is Unreliable:**
 Measurements in `time_ms` fluctuate unpredictably due to JVM warm-up, Just-In-Time (JIT) compilation, garbage collection pauses, and OS background load. Relying on exact internal operation counters (`edge_scans`, `dsu_ops`, `comparisons`) extracted directly into `results_2.csv` provides deterministic, reproducible, and completely hardware-independent evidence of algorithmic efficiency.
+
+![Code_Generated_Image.png](../../Downloads/Code_Generated_Image.png)
+![Code_Generated_Image (1).png](../../Downloads/Code_Generated_Image%20%281%29.png)
+![Code_Generated_Image (2).png](../../Downloads/Code_Generated_Image%20%282%29.png)
